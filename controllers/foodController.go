@@ -2,18 +2,20 @@ package controllers
 
 import (
 	"context"
-	"fmt"
-	"net/http"
-	"time"
-
 	"golang-restaurant-management/database"
 	"golang-restaurant-management/models"
+	"log"
+	"math"
+	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Initialize MongoDB collections
@@ -21,25 +23,67 @@ var foodCollection *mongo.Collection = database.OpenCollection(database.Client, 
 var menuCollection *mongo.Collection = database.OpenCollection(database.Client, "menu")
 var validate = validator.New()
 
-// GetFoods retrieves all food items (to be implemented)
+// GetFoods retrieves all food items
 func GetFoods() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Implementation goes here
-	}
-}
-
-// ! GetFood retrieves a single food item by its food_id
-func GetFood() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Set timeout for the database operation
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
-		foodId := c.Param("food_id") // Corrected parameter
+		// Handle pagination
+		recordPerPage, err := strconv.Atoi(c.Query("recordPerPage"))
+		if err != nil || recordPerPage < 1 {
+			recordPerPage = 10
+		}
 
+		page, err := strconv.Atoi(c.Query("page"))
+		if err != nil || page < 1 {
+			page = 1
+		}
+
+		startIndex := (page - 1) * recordPerPage
+
+		// Aggregation pipeline
+		matchStage := bson.D{{"$match", bson.D{{}}}}
+		groupStage := bson.D{{"$group", bson.D{
+			{"_id", nil},
+			{"total_count", bson.D{{"$sum", 1}}},
+			{"data", bson.D{{"$push", "$$ROOT"}}},
+		}}}
+		projectStage := bson.D{
+			{"$project", bson.D{
+				{"_id", 0},
+				{"total_count", 1},
+				{"food_items", bson.D{{"$slice", []interface{}{"$data", startIndex, recordPerPage}}}},
+			}},
+		}
+
+		// Execute aggregation query
+		result, err := foodCollection.Aggregate(ctx, mongo.Pipeline{
+			matchStage, groupStage, projectStage,
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while listing food items"})
+			return
+		}
+
+		var allFoods []bson.M
+		if err = result.All(ctx, &allFoods); err != nil {
+			log.Fatal(err)
+		}
+
+		c.JSON(http.StatusOK, allFoods[0])
+	}
+}
+
+// GetFood retrieves a single food item by its food_id
+func GetFood() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		defer cancel()
+
+		foodId := c.Param("food_id")
 		var food models.Food
 
-		// Fetch food item from MongoDB
 		err := foodCollection.FindOne(ctx, bson.M{"food_id": foodId}).Decode(&food)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
@@ -49,13 +93,11 @@ func GetFood() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching food item"})
 			return
 		}
-
-		// Return the found food item
 		c.JSON(http.StatusOK, food)
 	}
 }
 
-// ! CreateFood adds a new food item
+// CreateFood adds a new food item
 func CreateFood() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
@@ -64,9 +106,14 @@ func CreateFood() gin.HandlerFunc {
 		var menu models.Menu
 		var food models.Food
 
-		// Parse JSON body
 		if err := c.BindJSON(&food); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Ensure required fields are not nil
+		if food.Name == nil || food.Price == nil || food.MenuID == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required fields"})
 			return
 		}
 
@@ -77,43 +124,40 @@ func CreateFood() gin.HandlerFunc {
 			return
 		}
 
-		// Check if the referenced menu exists
+		// Check if menu exists
 		err := menuCollection.FindOne(ctx, bson.M{"menu_id": food.MenuID}).Decode(&menu)
 		if err != nil {
-			msg := "Menu was not found"
-			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Menu was not found"})
 			return
 		}
 
 		// Set timestamps
 		food.CreatedAt = time.Now()
 		food.UpdatedAt = time.Now()
-
-		// Generate unique ID
 		food.ID = primitive.NewObjectID()
-		food.FoodID = food.ID.Hex()
+		foodID := food.ID.Hex()
+		food.FoodID = &foodID // Assign FoodID as a pointer
 
-		// Round price to 2 decimal places
-		num := toFixed(*food.Price, 2)
-		food.Price = &num
+		// Round price safely
+		var num float64
+		if food.Price != nil {
+			num = toFixed(*food.Price, 2)
+			food.Price = &num
+		}
 
 		// Insert into database
 		result, insertErr := foodCollection.InsertOne(ctx, food)
 		if insertErr != nil {
-			msg := "Food item was not created"
-			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Food item was not created"})
 			return
 		}
 
-		// Return success response
 		c.JSON(http.StatusOK, result)
 	}
 }
 
-// toFixed rounds a float64 to a given number of decimal places
+// toFixed rounds a float to a given number of decimal places
 func toFixed(num float64, precision int) float64 {
-	output := fmt.Sprintf("%.*f", precision, num)
-	var rounded float64
-	fmt.Sscanf(output, "%f", &rounded)
-	return rounded
+	output := math.Pow(10, float64(precision))
+	return float64(int(num*output+0.5)) / output
 }
