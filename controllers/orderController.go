@@ -3,24 +3,17 @@ package controllers
 import (
 	"context"
 	"golang-restaurant-management/database"
+	"golang-restaurant-management/helpers"
 	"golang-restaurant-management/models"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
-
-// Initialize order and table collections
-var orderCollection *mongo.Collection = database.OpenCollection(database.Client, "order")
-var tableCollection *mongo.Collection = database.OpenCollection(database.Client, "table")
-var validate = validator.New()
 
 // Get all orders with pagination
 func GetOrders() gin.HandlerFunc {
@@ -45,7 +38,7 @@ func GetOrders() gin.HandlerFunc {
 		limitStage := bson.D{{"$limit", recordPerPage}}
 
 		// Fetch orders with pagination
-		result, err := orderCollection.Aggregate(ctx, mongo.Pipeline{matchStage, skipStage, limitStage})
+		result, err := database.OrderCollection.Aggregate(ctx, ~.Pipeline{matchStage, skipStage, limitStage})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while listing orders"})
 			return
@@ -53,7 +46,8 @@ func GetOrders() gin.HandlerFunc {
 
 		var allOrders []bson.M
 		if err = result.All(ctx, &allOrders); err != nil {
-			log.Fatal(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error retrieving orders"})
+			return
 		}
 
 		c.JSON(http.StatusOK, allOrders)
@@ -69,7 +63,7 @@ func GetOrder() gin.HandlerFunc {
 		orderID := c.Param("order_id")
 		var order models.Order
 
-		err := orderCollection.FindOne(ctx, bson.M{"order_id": orderID}).Decode(&order)
+		err := database.OrderCollection.FindOne(ctx, bson.M{"order_id": orderID}).Decode(&order)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 			return
@@ -100,7 +94,7 @@ func CreateOrder() gin.HandlerFunc {
 			return
 		}
 
-		validationErr := validate.Struct(order)
+		validationErr := helpers.Validate.Struct(order)
 		if validationErr != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": validationErr.Error()})
 			return
@@ -108,7 +102,7 @@ func CreateOrder() gin.HandlerFunc {
 
 		// Check if table exists
 		if order.TableID != nil {
-			err := tableCollection.FindOne(ctx, bson.M{"table_id": order.TableID}).Decode(&table)
+			err := database.TableCollection.FindOne(ctx, bson.M{"table_id": order.TableID}).Decode(&table)
 			if err != nil {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Table not found"})
 				return
@@ -122,7 +116,7 @@ func CreateOrder() gin.HandlerFunc {
 		order.OrderID = order.ID.Hex()
 
 		// Insert into database
-		result, insertErr := orderCollection.InsertOne(ctx, order)
+		result, insertErr := database.OrderCollection.InsertOne(ctx, order)
 		if insertErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Order could not be created"})
 			return
@@ -149,12 +143,19 @@ func UpdateOrder() gin.HandlerFunc {
 			return
 		}
 
+		// Validate request
+		validationErr := helpers.Validate.Struct(order)
+		if validationErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": validationErr.Error()})
+			return
+		}
+
 		// Prepare update object
 		var updateObj primitive.D
 
 		// Validate if table exists before updating
 		if order.TableID != nil {
-			err := tableCollection.FindOne(ctx, bson.M{"table_id": order.TableID}).Decode(&table)
+			err := database.TableCollection.FindOne(ctx, bson.M{"table_id": order.TableID}).Decode(&table)
 			if err != nil {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Table not found"})
 				return
@@ -166,13 +167,12 @@ func UpdateOrder() gin.HandlerFunc {
 		order.UpdatedAt = time.Now()
 		updateObj = append(updateObj, bson.E{"updated_at", order.UpdatedAt})
 
-		// Update options
+		// Perform update
+		filter := bson.M{"order_id": orderID}
 		upsert := true
 		opt := options.UpdateOptions{Upsert: &upsert}
-		filter := bson.M{"order_id": orderID}
 
-		// Perform update
-		result, err := orderCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
+		result, err := database.OrderCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Order update failed"})
 			return
@@ -191,7 +191,7 @@ func DeleteOrder() gin.HandlerFunc {
 		orderID := c.Param("order_id")
 
 		filter := bson.M{"order_id": orderID}
-		result, err := orderCollection.DeleteOne(ctx, filter)
+		result, err := database.OrderCollection.DeleteOne(ctx, filter)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete order"})
 			return
@@ -206,7 +206,7 @@ func DeleteOrder() gin.HandlerFunc {
 	}
 }
 
-// OrderItemOrderCreator creates an order and returns its OrderID
+// OrderItemOrderCreator - Creates an order and returns its OrderID
 func OrderItemOrderCreator(order models.Order) string {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 	defer cancel()
@@ -218,7 +218,7 @@ func OrderItemOrderCreator(order models.Order) string {
 	order.OrderID = order.ID.Hex()
 
 	// Insert into database
-	_, err := orderCollection.InsertOne(ctx, order)
+	_, err := database.OrderCollection.InsertOne(ctx, order)
 	if err != nil {
 		return ""
 	}

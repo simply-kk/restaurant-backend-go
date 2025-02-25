@@ -3,7 +3,7 @@ package controllers
 import (
 	"context"
 	"golang-restaurant-management/database"
-	helper "golang-restaurant-management/helpers"
+	"golang-restaurant-management/helpers"
 	"golang-restaurant-management/models"
 	"log"
 	"net/http"
@@ -92,7 +92,7 @@ func SignUp() gin.HandlerFunc {
 		}
 
 		// Validate user input
-		validationErr := validate.Struct(user)
+		validationErr := helpers.Validate.Struct(user)
 		if validationErr != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": validationErr.Error()})
 			return
@@ -129,7 +129,7 @@ func SignUp() gin.HandlerFunc {
 		user.UserID = user.ID.Hex()
 
 		// Generate tokens
-		token, refreshToken, _ := helper.GenerateAllTokens(*user.Email, *user.FirstName, *user.LastName, user.UserID)
+		token, refreshToken, _ := helpers.GenerateAllTokens(*user.Email, *user.FirstName, *user.LastName, user.UserID)
 		user.Token = &token
 		user.RefreshToken = &refreshToken
 
@@ -174,10 +174,10 @@ func Login() gin.HandlerFunc {
 		}
 
 		// Generate tokens
-		token, refreshToken, _ := helper.GenerateAllTokens(*foundUser.Email, *foundUser.FirstName, *foundUser.LastName, foundUser.UserID)
+		token, refreshToken, _ := helpers.GenerateAllTokens(*foundUser.Email, *foundUser.FirstName, *foundUser.LastName, foundUser.UserID)
 
 		// Update tokens in DB
-		helper.UpdateAllTokens(token, refreshToken, foundUser.UserID)
+		helpers.UpdateAllTokens(token, refreshToken, foundUser.UserID)
 
 		// Send response
 		c.JSON(http.StatusOK, foundUser)

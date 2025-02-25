@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"golang-restaurant-management/database"
+	"golang-restaurant-management/helpers"
 	"golang-restaurant-management/models"
 	"log"
 	"net/http"
@@ -11,11 +12,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
+
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var menuCollection *mongo.Collection = database.OpenCollection(database.Client, "menu")
 
 // Get all menus
 func GetMenus() gin.HandlerFunc {
@@ -23,7 +23,7 @@ func GetMenus() gin.HandlerFunc {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
-		result, err := menuCollection.Find(ctx, bson.M{})
+		result, err := database.MenuCollection.Find(ctx, bson.M{})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while listing the menu items"})
 			return
@@ -47,7 +47,7 @@ func GetMenu() gin.HandlerFunc {
 		menuId := c.Param("menu_id")
 		var menu models.Menu
 
-		err := menuCollection.FindOne(ctx, bson.M{"menu_id": menuId}).Decode(&menu)
+		err := database.MenuCollection.FindOne(ctx, bson.M{"menu_id": menuId}).Decode(&menu)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while fetching the menu"})
 			return
@@ -70,7 +70,7 @@ func CreateMenu() gin.HandlerFunc {
 		}
 
 		// Validate input
-		validationErr := validate.Struct(menu)
+		validationErr :=helpers.Validate.Struct(menu)
 		if validationErr != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": validationErr.Error()})
 			return
@@ -81,10 +81,10 @@ func CreateMenu() gin.HandlerFunc {
 		menu.UpdatedAt = time.Now()
 		menu.ID = primitive.NewObjectID()
 		menuID := menu.ID.Hex()
-		menu.MenuID = &menuID
+		menu.MenuID = menuID
 
 		// Insert into database
-		result, insertErr := menuCollection.InsertOne(ctx, menu)
+		result, insertErr := database.MenuCollection.InsertOne(ctx, menu)
 		if insertErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Menu item was not created"})
 			return
@@ -144,7 +144,7 @@ func UpdateMenu() gin.HandlerFunc {
 		opt := options.UpdateOptions{Upsert: &upsert}
 
 		// Perform update
-		result, err := menuCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
+		result, err := database.MenuCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Menu update failed"})
 			return

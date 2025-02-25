@@ -3,22 +3,20 @@ package controllers
 import (
 	"context"
 	"golang-restaurant-management/database"
+	"golang-restaurant-management/helpers"
 	"golang-restaurant-management/models"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// Initialize table collection
-var tableCollection *mongo.Collection = database.OpenCollection(database.Client, "table")
-var validate = validator.New()
+
 
 // Get all tables
 func GetTables() gin.HandlerFunc {
@@ -26,7 +24,7 @@ func GetTables() gin.HandlerFunc {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
-		result, err := tableCollection.Find(ctx, bson.M{})
+		result, err := database.TableCollection.Find(ctx, bson.M{})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while listing table items"})
 			return
@@ -50,7 +48,7 @@ func GetTable() gin.HandlerFunc {
 		tableID := c.Param("table_id")
 		var table models.Table
 
-		err := tableCollection.FindOne(ctx, bson.M{"table_id": tableID}).Decode(&table)
+		err := database.TableCollection.FindOne(ctx, bson.M{"table_id": tableID}).Decode(&table)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Table not found"})
 			return
@@ -75,7 +73,7 @@ func CreateTable() gin.HandlerFunc {
 		}
 
 		// Validate input
-		validationErr := validate.Struct(table)
+		validationErr := helpers.Validate.Struct(table)
 		if validationErr != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": validationErr.Error()})
 			return
@@ -88,7 +86,7 @@ func CreateTable() gin.HandlerFunc {
 		table.TableID = table.ID.Hex()
 
 		// Insert into DB
-		result, insertErr := tableCollection.InsertOne(ctx, table)
+		result, insertErr := database.TableCollection.InsertOne(ctx, table)
 		if insertErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Table could not be created"})
 			return
@@ -133,7 +131,7 @@ func UpdateTable() gin.HandlerFunc {
 		upsert := true
 		opt := options.UpdateOptions{Upsert: &upsert}
 
-		result, err := tableCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
+		result, err := database.TableCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Table update failed"})
 			return

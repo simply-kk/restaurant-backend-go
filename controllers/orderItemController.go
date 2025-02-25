@@ -3,15 +3,14 @@ package controllers
 import (
 	"context"
 	"golang-restaurant-management/database"
+	"golang-restaurant-management/helpers"
 	"golang-restaurant-management/models"
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -21,16 +20,13 @@ type OrderItemPack struct {
 	OrderItems []models.OrderItem
 }
 
-// Initialize order item collection
-var orderItemCollection *mongo.Collection = database.OpenCollection(database.Client, "orderItem")
-
 // Get all order items
 func GetOrderItems() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
-		result, err := orderItemCollection.Find(ctx, bson.M{})
+		result, err := database.OrderItemCollection.Find(ctx, bson.M{})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while listing order items"})
 			return
@@ -38,7 +34,8 @@ func GetOrderItems() gin.HandlerFunc {
 
 		var allOrderItems []bson.M
 		if err = result.All(ctx, &allOrderItems); err != nil {
-			log.Fatal(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+			return
 		}
 
 		c.JSON(http.StatusOK, allOrderItems)
@@ -51,11 +48,11 @@ func GetOrderItemsByOrder() gin.HandlerFunc {
 		orderID := c.Param("order_id")
 
 		allOrderItems, err := ItemsByOrder(orderID)
-
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while listing order items"})
 			return
 		}
+
 		c.JSON(http.StatusOK, allOrderItems)
 	}
 }
@@ -69,7 +66,7 @@ func GetOrderItem() gin.HandlerFunc {
 		orderItemID := c.Param("order_item_id")
 		var orderItem models.OrderItem
 
-		err := orderItemCollection.FindOne(ctx, bson.M{"order_item_id": orderItemID}).Decode(&orderItem)
+		err := database.OrderItemCollection.FindOne(ctx, bson.M{"order_item_id": orderItemID}).Decode(&orderItem)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Order item not found"})
 			return
@@ -100,11 +97,9 @@ func UpdateOrderItem() gin.HandlerFunc {
 		if orderItem.UnitPrice != nil {
 			updateObj = append(updateObj, bson.E{"unit_price", *orderItem.UnitPrice})
 		}
-
 		if orderItem.Quantity != nil {
 			updateObj = append(updateObj, bson.E{"quantity", *orderItem.Quantity})
 		}
-
 		if orderItem.FoodID != nil {
 			updateObj = append(updateObj, bson.E{"food_id", *orderItem.FoodID})
 		}
@@ -119,7 +114,7 @@ func UpdateOrderItem() gin.HandlerFunc {
 		filter := bson.M{"order_item_id": orderItemID}
 
 		// Perform update
-		result, err := orderItemCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
+		result, err := database.OrderItemCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Order item update failed"})
 			return
@@ -156,7 +151,7 @@ func CreateOrderItem() gin.HandlerFunc {
 			orderItem.OrderID = orderID
 
 			// Validate input
-			validationErr := validate.Struct(orderItem)
+			validationErr := helpers.Validate.Struct(orderItem)
 			if validationErr != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": validationErr.Error()})
 				return
@@ -176,9 +171,10 @@ func CreateOrderItem() gin.HandlerFunc {
 		}
 
 		// Insert into DB
-		insertedOrderItems, err := orderItemCollection.InsertMany(ctx, orderItemsToBeInserted)
+		insertedOrderItems, err := database.OrderItemCollection.InsertMany(ctx, orderItemsToBeInserted)
 		if err != nil {
-			log.Fatal(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert order items"})
+			return
 		}
 
 		c.JSON(http.StatusOK, insertedOrderItems)
@@ -186,7 +182,7 @@ func CreateOrderItem() gin.HandlerFunc {
 }
 
 // Items by OrderID aggregation pipeline
-func ItemsByOrder(orderID string) (OrderItems []primitive.M, err error) {
+func ItemsByOrder(orderID string) ([]bson.M, error) {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 	defer cancel()
 
@@ -195,7 +191,7 @@ func ItemsByOrder(orderID string) (OrderItems []primitive.M, err error) {
 	unwindStage := bson.D{{"$unwind", bson.D{{"path", "$food"}, {"preserveNullAndEmptyArrays", true}}}}
 
 	// Execute aggregation
-	result, err := orderItemCollection.Aggregate(ctx, mongo.Pipeline{
+	result, err := database.OrderItemCollection.Aggregate(ctx, mongo.Pipeline{
 		matchStage, lookupStage, unwindStage,
 	})
 
@@ -203,9 +199,10 @@ func ItemsByOrder(orderID string) (OrderItems []primitive.M, err error) {
 		return nil, err
 	}
 
-	if err = result.All(ctx, &OrderItems); err != nil {
+	var orderItems []bson.M
+	if err = result.All(ctx, &orderItems); err != nil {
 		return nil, err
 	}
 
-	return OrderItems, nil
+	return orderItems, nil
 }

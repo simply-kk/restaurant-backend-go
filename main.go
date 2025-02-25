@@ -1,19 +1,20 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"golang-restaurant-management/database"
 	"golang-restaurant-management/middleware"
 	"golang-restaurant-management/routes"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/mongo"
 )
-
-var foodCollection *mongo.Collection
 
 func main() {
 	// Load environment variables
@@ -29,7 +30,7 @@ func main() {
 	}
 
 	// Initialize collection
-	foodCollection = database.OpenCollection(client, "food")
+	database.InitCollections(client)
 
 	// Initialize Gin Router
 	router := gin.Default() // Includes default logging and recovery middleware
@@ -48,12 +49,30 @@ func main() {
 	routes.OrderItemRoutes(router)
 	routes.InvoiceRoutes(router)
 
-	// Start the server
-	fmt.Println("Server running on port:", port)
-	if err := router.Run(":" + port); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+	// Run server in a goroutine so it doesn’t block shutdown handling
+	go func() {
+		fmt.Println("Server running on port:", port)
+		if err := router.Run(":" + port); err != nil {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// **Graceful Shutdown Handling**
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM) // Catch termination signals
+	<-quit // Block until a signal is received
+
+	fmt.Println("\nShutting down server...")
+
+	// Gracefully close the database
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := client.Disconnect(ctx); err != nil {
+		log.Println("Error disconnecting MongoDB:", err)
+	} else {
+		fmt.Println("MongoDB connection closed successfully.")
 	}
 
-	// Ensure MongoDB closes when the server shuts down
-	defer database.CloseDB()
+	fmt.Println("Server shutdown completed.")
 }

@@ -18,7 +18,7 @@ func Authentication() gin.HandlerFunc {
 		}
 
 		// Validate Token
-		claims, err := helper.ValidateToken(clientToken)
+		claims, err := helpers.ValidateToken(clientToken)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("Invalid token: %v", err)})
 			return

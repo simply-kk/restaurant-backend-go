@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"golang-restaurant-management/database"
+	"golang-restaurant-management/helpers"
 	"golang-restaurant-management/models"
 	"log"
 	"math"
@@ -11,17 +12,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// Initialize MongoDB collections
-var foodCollection *mongo.Collection = database.OpenCollection(database.Client, "food")
-var menuCollection *mongo.Collection = database.OpenCollection(database.Client, "menu")
-var validate = validator.New()
 
 // GetFoods retrieves all food items with pagination
 func GetFoods() gin.HandlerFunc {
@@ -48,7 +44,7 @@ func GetFoods() gin.HandlerFunc {
 		limitStage := bson.D{{"$limit", recordPerPage}}
 
 		// Execute aggregation query
-		result, err := foodCollection.Aggregate(ctx, mongo.Pipeline{matchStage, skipStage, limitStage})
+		result, err := database.FoodCollection.Aggregate(ctx, mongo.Pipeline{matchStage, skipStage, limitStage})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while listing food items"})
 			return
@@ -72,7 +68,7 @@ func GetFood() gin.HandlerFunc {
 		foodID := c.Param("food_id")
 		var food models.Food
 
-		err := foodCollection.FindOne(ctx, bson.M{"food_id": foodID}).Decode(&food)
+		err := database.FoodCollection.FindOne(ctx, bson.M{"food_id": foodID}).Decode(&food)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Food item not found"})
 			return
@@ -104,14 +100,14 @@ func CreateFood() gin.HandlerFunc {
 		}
 
 		// Validate input
-		validationErr := validate.Struct(food)
+		validationErr := helpers.Validate.Struct(food)
 		if validationErr != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": validationErr.Error()})
 			return
 		}
 
 		// Check if menu exists
-		err := menuCollection.FindOne(ctx, bson.M{"menu_id": *food.MenuID}).Decode(&menu)
+		err := database.MenuCollection.FindOne(ctx, bson.M{"menu_id": *food.MenuID}).Decode(&menu)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Menu not found"})
 			return
@@ -128,7 +124,7 @@ func CreateFood() gin.HandlerFunc {
 		food.Price = &num
 
 		// Insert into database
-		result, insertErr := foodCollection.InsertOne(ctx, food)
+		result, insertErr := database.FoodCollection.InsertOne(ctx, food)
 		if insertErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Food item was not created"})
 			return
@@ -172,7 +168,7 @@ func UpdateFood() gin.HandlerFunc {
 		}
 
 		if food.MenuID != nil {
-			err := menuCollection.FindOne(ctx, bson.M{"menu_id": *food.MenuID}).Decode(&menu)
+			err := database.MenuCollection.FindOne(ctx, bson.M{"menu_id": *food.MenuID}).Decode(&menu)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Menu not found"})
 				return
@@ -190,7 +186,7 @@ func UpdateFood() gin.HandlerFunc {
 		opt := options.UpdateOptions{Upsert: &upsert}
 
 		// Perform update
-		result, err := foodCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
+		result, err := database.FoodCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Food item update failed"})
 			return
@@ -209,7 +205,7 @@ func DeleteFood() gin.HandlerFunc {
 		foodID := c.Param("food_id")
 
 		filter := bson.M{"food_id": foodID}
-		result, err := foodCollection.DeleteOne(ctx, filter)
+		result, err := database.FoodCollection.DeleteOne(ctx, filter)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete food item"})
 			return

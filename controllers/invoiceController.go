@@ -11,7 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -26,17 +25,13 @@ type InvoiceViewFormat struct {
 	OrderDetails   interface{}
 }
 
-// Initialize collections
-var invoiceCollection *mongo.Collection = database.OpenCollection(database.Client, "invoice")
-var orderCollection *mongo.Collection = database.OpenCollection(database.Client, "order")
-
 // Get all invoices
 func GetInvoices() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
-		result, err := invoiceCollection.Find(ctx, bson.M{})
+		result, err := database.InvoiceCollection.Find(ctx, bson.M{})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while listing invoice items"})
 			return
@@ -59,7 +54,7 @@ func GetInvoice() gin.HandlerFunc {
 		invoiceID := c.Param("invoice_id")
 		var invoice models.Invoice
 
-		err := invoiceCollection.FindOne(ctx, bson.M{"invoice_id": invoiceID}).Decode(&invoice)
+		err := database.InvoiceCollection.FindOne(ctx, bson.M{"invoice_id": invoiceID}).Decode(&invoice)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while fetching invoice item"})
 			return
@@ -109,7 +104,7 @@ func CreateInvoice() gin.HandlerFunc {
 
 		// Check if order exists
 		var order models.Order
-		err := orderCollection.FindOne(ctx, bson.M{"order_id": invoice.OrderID}).Decode(&order)
+		err := database.OrderCollection.FindOne(ctx, bson.M{"order_id": invoice.OrderID}).Decode(&order)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Order was not found"})
 			return
@@ -130,7 +125,7 @@ func CreateInvoice() gin.HandlerFunc {
 		invoice.InvoiceID = invoice.ID.Hex()
 
 		// Insert into DB
-		result, insertErr := invoiceCollection.InsertOne(ctx, invoice)
+		result, insertErr := database.InvoiceCollection.InsertOne(ctx, invoice)
 		if insertErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invoice item was not created"})
 			return
@@ -173,7 +168,7 @@ func UpdateInvoice() gin.HandlerFunc {
 		upsert := true
 		opt := options.UpdateOptions{Upsert: &upsert}
 
-		result, err := invoiceCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
+		result, err := database.InvoiceCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invoice update failed"})
 			return
