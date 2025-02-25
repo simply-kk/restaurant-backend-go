@@ -40,15 +40,10 @@ func GetUsers() gin.HandlerFunc {
 		startIndex := (page - 1) * recordPerPage
 
 		matchStage := bson.D{{"$match", bson.D{}}}
-		projectStage := bson.D{
-			{"$project", bson.D{
-				{"_id", 0},
-				{"total_count", 1},
-				{"user_items", bson.D{{"$slice", []interface{}{"$data", startIndex, recordPerPage}}}},
-			}},
-		}
+		skipStage := bson.D{{"$skip", startIndex}}
+		limitStage := bson.D{{"$limit", recordPerPage}}
 
-		result, err := userCollection.Aggregate(ctx, mongo.Pipeline{matchStage, projectStage})
+		result, err := userCollection.Aggregate(ctx, mongo.Pipeline{matchStage, skipStage, limitStage})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while listing users"})
 			return
@@ -104,23 +99,21 @@ func SignUp() gin.HandlerFunc {
 		}
 
 		// Check if email already exists
-		count, err := userCollection.CountDocuments(ctx, bson.M{"email": user.Email})
+		emailCount, err := userCollection.CountDocuments(ctx, bson.M{"email": user.Email})
 		if err != nil {
-			log.Panic(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while checking email"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking email"})
 			return
 		}
 
 		// Check if phone number already exists
-		count, err = userCollection.CountDocuments(ctx, bson.M{"phone": user.Phone})
+		phoneCount, err := userCollection.CountDocuments(ctx, bson.M{"phone": user.Phone})
 		if err != nil {
-			log.Panic(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while checking phone number"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking phone number"})
 			return
 		}
 
-		if count > 0 {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Email or phone number already exists"})
+		if emailCount > 0 || phoneCount > 0 {
+			c.JSON(http.StatusConflict, gin.H{"error": "Email or phone number already exists"})
 			return
 		}
 
@@ -133,8 +126,7 @@ func SignUp() gin.HandlerFunc {
 		user.CreatedAt = now
 		user.UpdatedAt = now
 		user.ID = primitive.NewObjectID()
-		userID := user.ID.Hex()
-		user.UserID = userID
+		user.UserID = user.ID.Hex()
 
 		// Generate tokens
 		token, refreshToken, _ := helper.GenerateAllTokens(*user.Email, *user.FirstName, *user.LastName, user.UserID)
@@ -142,13 +134,13 @@ func SignUp() gin.HandlerFunc {
 		user.RefreshToken = &refreshToken
 
 		// Insert into DB
-		resultInsertionNumber, insertErr := userCollection.InsertOne(ctx, user)
+		result, insertErr := userCollection.InsertOne(ctx, user)
 		if insertErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "User could not be created"})
 			return
 		}
 
-		c.JSON(http.StatusOK, resultInsertionNumber)
+		c.JSON(http.StatusOK, result)
 	}
 }
 

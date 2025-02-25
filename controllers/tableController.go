@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -17,6 +18,7 @@ import (
 
 // Initialize table collection
 var tableCollection *mongo.Collection = database.OpenCollection(database.Client, "table")
+var validate = validator.New()
 
 // Get all tables
 func GetTables() gin.HandlerFunc {
@@ -26,7 +28,7 @@ func GetTables() gin.HandlerFunc {
 
 		result, err := tableCollection.Find(ctx, bson.M{})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while listing tables"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while listing table items"})
 			return
 		}
 
@@ -45,10 +47,10 @@ func GetTable() gin.HandlerFunc {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
-		tableId := c.Param("table_id")
+		tableID := c.Param("table_id")
 		var table models.Table
 
-		err := tableCollection.FindOne(ctx, bson.M{"table_id": tableId}).Decode(&table)
+		err := tableCollection.FindOne(ctx, bson.M{"table_id": tableID}).Decode(&table)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Table not found"})
 			return
@@ -103,7 +105,7 @@ func UpdateTable() gin.HandlerFunc {
 		defer cancel()
 
 		var table models.Table
-		tableId := c.Param("table_id")
+		tableID := c.Param("table_id")
 
 		// Parse JSON body
 		if err := c.BindJSON(&table); err != nil {
@@ -126,12 +128,11 @@ func UpdateTable() gin.HandlerFunc {
 		table.UpdatedAt = time.Now()
 		updateObj = append(updateObj, bson.E{"updated_at", table.UpdatedAt})
 
-		// Update options
+		// Perform update
+		filter := bson.M{"table_id": tableID}
 		upsert := true
 		opt := options.UpdateOptions{Upsert: &upsert}
-		filter := bson.M{"table_id": tableId}
 
-		// Perform update
 		result, err := tableCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Table update failed"})

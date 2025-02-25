@@ -9,10 +9,10 @@ import (
 func InvoiceRoutes(router *gin.Engine) {
 	invoiceGroup := router.Group("/invoices")
 	{
-		invoiceGroup.GET("/", controllers.GetInvoices)                 //? Get all invoices
-		invoiceGroup.GET("/:invoice_id", controllers.GetInvoice)       //? Get invoice by ID
-		invoiceGroup.POST("/", controllers.CreateInvoice)              //? Create a new invoice
-		invoiceGroup.PUT("/:invoice_id", controllers.UpdateInvoice)    //? Update an invoice
-		invoiceGroup.DELETE("/:invoice_id", controllers.DeleteInvoice) //? Delete an invoice
+		invoiceGroup.GET("/", controllers.GetInvoices())                //? Get all invoices
+		invoiceGroup.GET("/:invoice_id", controllers.GetInvoice())      //? Get invoice by ID
+		invoiceGroup.POST("/", controllers.CreateInvoice())             //? Create a new invoice
+		invoiceGroup.PATCH("/:invoice_id", controllers.UpdateInvoice()) //? Update an invoice
+		// invoiceGroup.DELETE("/:invoice_id", controllers.DeleteInvoice) //? Delete an invoice
 	}
 }

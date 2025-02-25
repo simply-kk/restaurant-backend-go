@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"log"
 	"os"
 
 	"golang-restaurant-management/database"
@@ -11,26 +13,31 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-var foodCollection *mongo.Collection = database.OpenCollection(database.Client, "food")
+var foodCollection *mongo.Collection
 
 func main() {
 	// Load environment variables
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "8000" // Default port if not set
 	}
 
-	// Initialize Database
-	database.ConnectDatabase()
+	// Initialize Database Connection
+	client, err := database.DbInstance()
+	if err != nil {
+		log.Fatalf("Failed to connect to MongoDB: %v", err)
+	}
 
-	// Initialize Router
-	router := gin.New()
-	router.Use(gin.Logger())
+	// Initialize collection
+	foodCollection = database.OpenCollection(client, "food")
 
-	// Public Routes
+	// Initialize Gin Router
+	router := gin.Default() // Includes default logging and recovery middleware
+
+	// Public Routes (No Authentication Required)
 	routes.UserRoutes(router)
 
-	// Middleware for Authentication (Apply to Protected Routes)
+	// Apply Authentication Middleware (Protected Routes)
 	router.Use(middleware.Authentication())
 
 	// Protected Routes
@@ -41,6 +48,12 @@ func main() {
 	routes.OrderItemRoutes(router)
 	routes.InvoiceRoutes(router)
 
-	// Start Server
-	router.Run(":" + port)
+	// Start the server
+	fmt.Println("Server running on port:", port)
+	if err := router.Run(":" + port); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
+
+	// Ensure MongoDB closes when the server shuts down
+	defer database.CloseDB()
 }
