@@ -12,13 +12,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Get all orders with pagination
 func GetOrders() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
 		// Handle pagination
@@ -38,7 +39,7 @@ func GetOrders() gin.HandlerFunc {
 		limitStage := bson.D{{"$limit", recordPerPage}}
 
 		// Fetch orders with pagination
-		result, err := database.OrderCollection.Aggregate(ctx, ~.Pipeline{matchStage, skipStage, limitStage})
+		result, err := database.OrderCollection.Aggregate(ctx, mongo.Pipeline{matchStage, skipStage, limitStage})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while listing orders"})
 			return
@@ -57,7 +58,7 @@ func GetOrders() gin.HandlerFunc {
 // Get a single order by ID
 func GetOrder() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
 		orderID := c.Param("order_id")
@@ -76,7 +77,7 @@ func GetOrder() gin.HandlerFunc {
 // Create a new order
 func CreateOrder() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
 		var table models.Table
@@ -129,7 +130,7 @@ func CreateOrder() gin.HandlerFunc {
 // Update an existing order
 func UpdateOrder() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
 		var table models.Table
@@ -182,33 +183,9 @@ func UpdateOrder() gin.HandlerFunc {
 	}
 }
 
-// Delete an order
-func DeleteOrder() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-		defer cancel()
-
-		orderID := c.Param("order_id")
-
-		filter := bson.M{"order_id": orderID}
-		result, err := database.OrderCollection.DeleteOne(ctx, filter)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete order"})
-			return
-		}
-
-		if result.DeletedCount == 0 {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{"message": "Order deleted successfully"})
-	}
-}
-
 // OrderItemOrderCreator - Creates an order and returns its OrderID
 func OrderItemOrderCreator(order models.Order) string {
-	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 	defer cancel()
 
 	// Assign timestamps and IDs
