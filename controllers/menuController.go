@@ -16,7 +16,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-
 // Get all menus
 func GetMenus() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -70,7 +69,7 @@ func CreateMenu() gin.HandlerFunc {
 		}
 
 		// Validate input
-		validationErr :=helpers.Validate.Struct(menu)
+		validationErr := helpers.Validate.Struct(menu)
 		if validationErr != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": validationErr.Error()})
 			return
@@ -122,29 +121,29 @@ func UpdateMenu() gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid date range"})
 				return
 			}
-			updateObj = append(updateObj, bson.E{"start_date", menu.StartDate})
-			updateObj = append(updateObj, bson.E{"end_date", menu.EndDate})
+			updateObj = append(updateObj, bson.E{Key: "start_date", Value: menu.StartDate})
+			updateObj = append(updateObj, bson.E{Key: "end_date", Value: menu.EndDate})
 		}
 
 		// Update name if provided
 		if len(menu.Name) > 0 {
-			updateObj = append(updateObj, bson.E{"name", menu.Name})
+			updateObj = append(updateObj, bson.E{Key:"name", Value: menu.Name})
 		}
 
 		// Update category if provided
 		if len(menu.Category) > 0 {
-			updateObj = append(updateObj, bson.E{"category", menu.Category})
+			updateObj = append(updateObj, bson.E{Key:"category",Value:  menu.Category})
 		}
 
 		// Update timestamp
 		menu.UpdatedAt = time.Now()
-		updateObj = append(updateObj, bson.E{"updated_at", menu.UpdatedAt})
+		updateObj = append(updateObj, bson.E{Key:"updated_at",Value:  menu.UpdatedAt})
 
 		upsert := true
 		opt := options.UpdateOptions{Upsert: &upsert}
 
 		// Perform update
-		result, err := database.MenuCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
+		result, err := database.MenuCollection.UpdateOne(ctx, filter, bson.D{{Key:"$set", Value: updateObj}}, &opt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Menu update failed"})
 			return

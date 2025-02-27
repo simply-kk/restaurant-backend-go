@@ -11,9 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo"
-
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Struct to hold order items
@@ -97,18 +96,18 @@ func UpdateOrderItem() gin.HandlerFunc {
 		var updateObj primitive.D
 
 		if orderItem.UnitPrice != nil {
-			updateObj = append(updateObj, bson.E{"unit_price", *orderItem.UnitPrice})
+			updateObj = append(updateObj, bson.E{Key: "unit_price", Value: *orderItem.UnitPrice})
 		}
 		if orderItem.Quantity != nil {
-			updateObj = append(updateObj, bson.E{"quantity", *orderItem.Quantity})
+			updateObj = append(updateObj, bson.E{Key: "quantity", Value: *orderItem.Quantity})
 		}
 		if orderItem.FoodID != nil {
-			updateObj = append(updateObj, bson.E{"food_id", *orderItem.FoodID})
+			updateObj = append(updateObj, bson.E{Key: "food_id", Value: *orderItem.FoodID})
 		}
 
 		// Update timestamp
 		orderItem.UpdatedAt = time.Now()
-		updateObj = append(updateObj, bson.E{"updated_at", orderItem.UpdatedAt})
+		updateObj = append(updateObj, bson.E{Key: "updated_at", Value: orderItem.UpdatedAt})
 
 		// Update options
 		upsert := true
@@ -116,7 +115,7 @@ func UpdateOrderItem() gin.HandlerFunc {
 		filter := bson.M{"order_item_id": orderItemID}
 
 		// Perform update
-		result, err := database.OrderItemCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
+		result, err := database.OrderItemCollection.UpdateOne(ctx, filter, bson.D{{Key: "$set", Value: updateObj}}, &opt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Order item update failed"})
 			return
@@ -188,9 +187,17 @@ func ItemsByOrder(orderID string) ([]bson.M, error) {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 	defer cancel()
 
-	matchStage := bson.D{{"$match", bson.D{{"order_id", orderID}}}}
-	lookupStage := bson.D{{"$lookup", bson.D{{"from", "food"}, {"localField", "food_id"}, {"foreignField", "food_id"}, {"as", "food"}}}}
-	unwindStage := bson.D{{"$unwind", bson.D{{"path", "$food"}, {"preserveNullAndEmptyArrays", true}}}}
+	matchStage := bson.D{{Key: "$match", Value: bson.D{{Key: "order_id", Value: orderID}}}}
+	lookupStage := bson.D{{Key: "$lookup", Value: bson.D{
+		{Key: "from", Value: "food"},
+		{Key: "localField", Value: "food_id"},
+		{Key: "foreignField", Value: "food_id"},
+		{Key: "as", Value: "food"},
+	}}}
+	unwindStage := bson.D{{Key: "$unwind", Value: bson.D{
+		{Key: "path", Value: "$food"},
+		{Key: "preserveNullAndEmptyArrays", Value: true},
+	}}}
 
 	// Execute aggregation
 	result, err := database.OrderItemCollection.Aggregate(ctx, mongo.Pipeline{

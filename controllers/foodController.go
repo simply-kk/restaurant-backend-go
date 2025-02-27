@@ -14,10 +14,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
-
 
 // GetFoods retrieves all food items with pagination
 func GetFoods() gin.HandlerFunc {
@@ -39,9 +38,9 @@ func GetFoods() gin.HandlerFunc {
 		startIndex := (page - 1) * recordPerPage
 
 		// Aggregation pipeline
-		matchStage := bson.D{{"$match", bson.D{}}}
-		skipStage := bson.D{{"$skip", startIndex}}
-		limitStage := bson.D{{"$limit", recordPerPage}}
+		matchStage := bson.D{{Key: "$match", Value: bson.D{}}}
+		skipStage := bson.D{{Key: "$skip", Value: startIndex}}
+		limitStage := bson.D{{Key: "$limit", Value: recordPerPage}}
 
 		// Execute aggregation query
 		result, err := database.FoodCollection.Aggregate(ctx, mongo.Pipeline{matchStage, skipStage, limitStage})
@@ -155,16 +154,16 @@ func UpdateFood() gin.HandlerFunc {
 		var updateObj primitive.D
 
 		if food.Name != nil {
-			updateObj = append(updateObj, bson.E{"name", food.Name})
+			updateObj = append(updateObj, bson.E{Key: "name", Value: food.Name})
 		}
 
 		if food.Price != nil {
 			num := toFixed(*food.Price, 2)
-			updateObj = append(updateObj, bson.E{"price", num})
+			updateObj = append(updateObj, bson.E{Key: "price", Value: num})
 		}
 
 		if food.FoodImage != nil {
-			updateObj = append(updateObj, bson.E{"food_image", food.FoodImage})
+			updateObj = append(updateObj, bson.E{Key: "food_image", Value: food.FoodImage})
 		}
 
 		if food.MenuID != nil {
@@ -173,12 +172,12 @@ func UpdateFood() gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Menu not found"})
 				return
 			}
-			updateObj = append(updateObj, bson.E{"menu_id", food.MenuID})
+			updateObj = append(updateObj, bson.E{Key: "menu_id", Value: food.MenuID})
 		}
 
 		// Update timestamp
 		food.UpdatedAt = time.Now()
-		updateObj = append(updateObj, bson.E{"updated_at", food.UpdatedAt})
+		updateObj = append(updateObj, bson.E{Key: "updated_at", Value: food.UpdatedAt})
 
 		// Update options
 		upsert := true
@@ -186,7 +185,7 @@ func UpdateFood() gin.HandlerFunc {
 		opt := options.UpdateOptions{Upsert: &upsert}
 
 		// Perform update
-		result, err := database.FoodCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
+		result, err := database.FoodCollection.UpdateOne(ctx, filter, bson.D{{Key: "$set", Value: updateObj}}, &opt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Food item update failed"})
 			return

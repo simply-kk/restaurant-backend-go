@@ -2,19 +2,18 @@ package controllers
 
 import (
 	"context"
-	"golang-restaurant-management/database"
-	"golang-restaurant-management/helpers"
-	"golang-restaurant-management/models"
-	"log"
-	"net/http"
-	"strconv"
-	"time"
-
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"golang-restaurant-management/database"
+	"golang-restaurant-management/helpers"
+	"golang-restaurant-management/models"
 	"golang.org/x/crypto/bcrypt"
+	"log"
+	"net/http"
+	"strconv"
+	"time"
 )
 
 // Initialize user collection
@@ -39,9 +38,9 @@ func GetUsers() gin.HandlerFunc {
 
 		startIndex := (page - 1) * recordPerPage
 
-		matchStage := bson.D{{"$match", bson.D{}}}
-		skipStage := bson.D{{"$skip", startIndex}}
-		limitStage := bson.D{{"$limit", recordPerPage}}
+		matchStage := bson.D{{Key: "$match", Value: bson.D{}}}
+		skipStage := bson.D{{Key: "$skip", Value: startIndex}}
+		limitStage := bson.D{{Key: "$limit", Value: recordPerPage}}
 
 		result, err := userCollection.Aggregate(ctx, mongo.Pipeline{matchStage, skipStage, limitStage})
 		if err != nil {

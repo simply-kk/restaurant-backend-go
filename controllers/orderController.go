@@ -34,9 +34,9 @@ func GetOrders() gin.HandlerFunc {
 		}
 
 		startIndex := (page - 1) * recordPerPage
-		matchStage := bson.D{{"$match", bson.D{}}}
-		skipStage := bson.D{{"$skip", startIndex}}
-		limitStage := bson.D{{"$limit", recordPerPage}}
+		matchStage := bson.D{{Key: "$match", Value: bson.D{}}}
+		skipStage := bson.D{{Key: "$skip", Value: startIndex}}
+		limitStage := bson.D{{Key: "$limit", Value: recordPerPage}}
 
 		// Fetch orders with pagination
 		result, err := database.OrderCollection.Aggregate(ctx, mongo.Pipeline{matchStage, skipStage, limitStage})
@@ -161,19 +161,19 @@ func UpdateOrder() gin.HandlerFunc {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Table not found"})
 				return
 			}
-			updateObj = append(updateObj, bson.E{"table_id", order.TableID})
+			updateObj = append(updateObj, bson.E{Key: "table_id", Value: order.TableID})
 		}
 
 		// Update timestamp
 		order.UpdatedAt = time.Now()
-		updateObj = append(updateObj, bson.E{"updated_at", order.UpdatedAt})
+		updateObj = append(updateObj, bson.E{Key: "updated_at", Value: order.UpdatedAt})
 
 		// Perform update
 		filter := bson.M{"order_id": orderID}
 		upsert := true
 		opt := options.UpdateOptions{Upsert: &upsert}
 
-		result, err := database.OrderCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
+		result, err := database.OrderCollection.UpdateOne(ctx, filter, bson.D{{Key: "$set", Value: updateObj}}, &opt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Order update failed"})
 			return

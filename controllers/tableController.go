@@ -16,8 +16,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-
-
 // Get all tables
 func GetTables() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -115,23 +113,23 @@ func UpdateTable() gin.HandlerFunc {
 		var updateObj primitive.D
 
 		if table.NumberOfGuests != nil {
-			updateObj = append(updateObj, bson.E{"number_of_guests", table.NumberOfGuests})
+			updateObj = append(updateObj, bson.E{Key: "number_of_guests", Value: table.NumberOfGuests})
 		}
 
 		if table.TableNumber != nil {
-			updateObj = append(updateObj, bson.E{"table_number", table.TableNumber})
+			updateObj = append(updateObj, bson.E{Key: "table_number", Value: table.TableNumber})
 		}
 
 		// Update timestamp
 		table.UpdatedAt = time.Now()
-		updateObj = append(updateObj, bson.E{"updated_at", table.UpdatedAt})
+		updateObj = append(updateObj, bson.E{Key: "updated_at", Value: table.UpdatedAt})
 
 		// Perform update
 		filter := bson.M{"table_id": tableID}
 		upsert := true
 		opt := options.UpdateOptions{Upsert: &upsert}
 
-		result, err := database.TableCollection.UpdateOne(ctx, filter, bson.D{{"$set", updateObj}}, &opt)
+		result, err := database.TableCollection.UpdateOne(ctx, filter, bson.D{{Key: "$set", Value: updateObj}}, &opt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Table update failed"})
 			return

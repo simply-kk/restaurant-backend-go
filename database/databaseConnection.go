@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
+	"github.com/joho/godotenv" 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -13,39 +15,48 @@ import (
 // Global MongoDB client instance
 var Client *mongo.Client
 
-// DbInstance initializes the MongoDB client only once
+//  Load environment variables
+func loadEnv() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("Warning: No .env file found")
+	}
+}
+
+//  DbInstance initializes the MongoDB client only once
 func DbInstance() (*mongo.Client, error) {
 	if Client != nil {
-		return Client, nil // Return existing connection
+		return Client, nil
 	}
 
-	MongoDbURI := "mongodb://localhost:27017"
-	fmt.Println("Connecting to MongoDB at:", MongoDbURI)
+	// Load .env variables before getting MONGODB_URI
+	loadEnv()
 
-	// Set client options
+	MongoDbURI := os.Getenv("MONGODB_URI")
+	if MongoDbURI == "" {
+		log.Fatal("MONGODB_URI is not set in .env file")
+	}
+
 	clientOptions := options.Client().ApplyURI(MongoDbURI)
-
-	// Connect to MongoDB
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	client, err := mongo.Connect(ctx, clientOptions)
-	cancel() // Cancel after connection attempt
 	if err != nil {
 		return nil, fmt.Errorf("error connecting to MongoDB: %w", err)
 	}
 
-	// Use a separate context for Ping()
-	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer pingCancel()
-	if err = client.Ping(pingCtx, nil); err != nil {
+	//  Ping MongoDB to verify connection
+	if err = client.Ping(ctx, nil); err != nil {
 		return nil, fmt.Errorf("could not ping MongoDB: %w", err)
 	}
 
 	fmt.Println("Connected to MongoDB successfully!")
-	Client = client 
+	Client = client
 	return Client, nil
 }
 
-// OpenCollection returns a reference to a MongoDB collection
+//  OpenCollection returns a reference to a MongoDB collection
 func OpenCollection(client *mongo.Client, collectionName string) *mongo.Collection {
 	if client == nil {
 		log.Fatal("Cannot open collection: MongoDB client is nil")
@@ -53,7 +64,7 @@ func OpenCollection(client *mongo.Client, collectionName string) *mongo.Collecti
 	return client.Database("restaurant").Collection(collectionName)
 }
 
-// CloseDB gracefully closes the MongoDB connection
+//  CloseDB gracefully closes the MongoDB connection
 func CloseDB() {
 	if Client != nil {
 		err := Client.Disconnect(context.TODO())
@@ -62,6 +73,6 @@ func CloseDB() {
 		} else {
 			fmt.Println("MongoDB connection closed successfully.")
 		}
-		Client = nil 
+		Client = nil
 	}
 }

@@ -1,0 +1,15 @@
+# Ignore environment variables
+.env
+
+# Ignore compiled binaries
+*.exe
+*.out
+*.o
+
+# Ignore dependencies (if using vendor)
+vendor/
+
+# Ignore IDE/Editor settings
+.vscode/
+.idea/
+.DS_Store
