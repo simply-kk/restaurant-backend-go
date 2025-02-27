@@ -1,78 +1,69 @@
-package database
+package main
 
 import (
-	"context"
-	"fmt"
-	"log"
-	"os"
-	"time"
+    "context"
+    "fmt"
+    "log"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
 
-	"github.com/joho/godotenv" 
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+    "golang-restaurant-management/database"
+    "golang-restaurant-management/middleware"
+    "golang-restaurant-management/routes"
+
+    "github.com/gin-gonic/gin"
 )
 
-// Global MongoDB client instance
-var Client *mongo.Client
+func main() {
+    port := os.Getenv("PORT")
+    if port == "" {
+        port = "8000"
+    }
 
-// DbInstance initializes the MongoDB client only once
-func DbInstance() (*mongo.Client, error) {
-	if Client != nil {
-		return Client, nil // Return existing connection
-	}
+    client, err := database.DbInstance()
+    if err != nil {
+        log.Fatalf("Failed to connect to MongoDB: %v", err)
+    }
+    if client == nil {
+        log.Fatalf("MongoDB client is nil despite no error from DbInstance")
+    }
 
-	// ✅ Load environment variables from .env file
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("Warning: No .env file found, using default values")
-	}
+    database.InitCollections(client)
 
-	// ✅ Read MongoDB URI from .env
-	MongoDbURI := os.Getenv("MONGODB_URI")
-	if MongoDbURI == "" {
-		MongoDbURI = "mongodb://localhost:27017" // Default URI
-	}
-	fmt.Println("Connecting to MongoDB at:", MongoDbURI)
+    router := gin.Default()
+    routes.UserRoutes(router)
+    router.Use(middleware.Authentication())
+    routes.FoodRoutes(router)
+    routes.MenuRoutes(router)
+    routes.TableRoutes(router)
+    routes.OrderRoutes(router)
+    routes.OrderItemRoutes(router)
+    routes.InvoiceRoutes(router)
 
-	// Set client options
-	clientOptions := options.Client().ApplyURI(MongoDbURI)
+    go func() {
+        fmt.Println("Server running on port:", port)
+        if err := router.Run(":" + port); err != nil {
+            log.Fatalf("Failed to start server: %v", err)
+        }
+    }()
 
-	// Connect to MongoDB
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+    quit := make(chan os.Signal, 1)
+    signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+    <-quit
+    fmt.Println("\nShutting down server...")
 
-	client, err := mongo.Connect(ctx, clientOptions)
-	if err != nil {
-		return nil, fmt.Errorf("error connecting to MongoDB: %w", err)
-	}
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
 
-	// Ping MongoDB to check connection
-	if err = client.Ping(ctx, nil); err != nil {
-		return nil, fmt.Errorf("could not ping MongoDB: %w", err)
-	}
+    if client != nil {
+        if err := client.Disconnect(ctx); err != nil {
+            log.Println("Error disconnecting MongoDB:", err)
+        } else {
+            fmt.Println("MongoDB connection closed successfully.")
+        }
+    }
 
-	fmt.Println("Connected to MongoDB successfully!")
-	Client = client
-	return Client, nil
-}
-
-// OpenCollection returns a reference to a MongoDB collection
-func OpenCollection(client *mongo.Client, collectionName string) *mongo.Collection {
-	if client == nil {
-		log.Fatal("Cannot open collection: MongoDB client is nil")
-	}
-	return client.Database("restaurant").Collection(collectionName)
-}
-
-// CloseDB gracefully closes the MongoDB connection
-func CloseDB() {
-	if Client != nil {
-		err := Client.Disconnect(context.TODO())
-		if err != nil {
-			log.Println("Error disconnecting MongoDB:", err)
-		} else {
-			fmt.Println("MongoDB connection closed successfully.")
-		}
-		Client = nil
-	}
+    fmt.Println("Server shutdown completed.")
 }

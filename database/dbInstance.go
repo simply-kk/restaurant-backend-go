@@ -13,11 +13,21 @@ var (
 	OrderItemCollection *mongo.Collection
 )
 
+// func InitCollections(client *mongo.Client) {
+// 	MenuCollection = client.Database("restaurant").Collection("menu")
+// 	OrderCollection = client.Database("restaurant").Collection("order")
+// 	TableCollection = client.Database("restaurant").Collection("table")
+// 	FoodCollection = client.Database("restaurant").Collection("food")
+// 	InvoiceCollection = client.Database("restaurant").Collection("invoice")
+// 	OrderItemCollection = client.Database("restaurant").Collection("orderItem")
+// }
+
 func InitCollections(client *mongo.Client) {
-	MenuCollection = client.Database("restaurant").Collection("menu")
-	OrderCollection = client.Database("restaurant").Collection("order")
-	TableCollection = client.Database("restaurant").Collection("table")
-	FoodCollection = client.Database("restaurant").Collection("food")
-	InvoiceCollection = client.Database("restaurant").Collection("invoice")
-	OrderItemCollection = client.Database("restaurant").Collection("orderItem")
+    MenuCollection = OpenCollection(client, "menu")
+    OrderCollection = OpenCollection(client, "order")
+    TableCollection = OpenCollection(client, "table")
+    FoodCollection = OpenCollection(client, "food")
+    InvoiceCollection = OpenCollection(client, "invoice")
+    OrderItemCollection = OpenCollection(client, "orderItem")
 }
+
